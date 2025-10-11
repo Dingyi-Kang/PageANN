@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Linux Asynchronous I/O Header
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 #ifndef _WINDOWS
@@ -34,6 +38,9 @@ class LinuxAlignedFileReader : public AlignedFileReader
     // process batch of aligned requests in parallel
     // NOTE :: blocking call
     void read(std::vector<AlignedRead> &read_reqs, IOContext &ctx, bool async = false);
+
+    int submit_reqs(std::vector<AlignedRead> &read_reqs, IOContext &ctx);
+    void get_events(IOContext &ctx, int n_ops);
 };
 
 #endif

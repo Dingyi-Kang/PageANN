@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Page-level Graph Index Generation
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include "in_mem_graph_store.h"
 #include "utils.h"
@@ -227,6 +231,10 @@ int InMemGraphStore::save_graph(const std::string &index_path_prefix, const size
     out.write((char *)&max_degree, sizeof(uint32_t));
     out.close();
     return (int)index_size;
+}
+
+size_t InMemGraphStore::getGraphNodesNum() const {
+    return _graph.size();
 }
 
 size_t InMemGraphStore::get_max_range_of_graph()

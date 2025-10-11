@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Disk-based Index Construction and Utilities
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 #include <stdint.h>
@@ -20,8 +24,8 @@ const uint32_t NUM_FROZEN_POINTS_DYNAMIC = 1;
 const float GRAPH_SLACK_FACTOR = 1.3f;
 
 // SSD Index related limits
-const uint64_t MAX_GRAPH_DEGREE = 512;
-const uint64_t SECTOR_LEN = 4096;
+const uint64_t MAX_GRAPH_DEGREE = 896;//640;//768;//512;
+const uint64_t SECTOR_LEN = 4096; //this is the original version
 const uint64_t MAX_N_SECTOR_READS = 128;
 
 // following constants should always be specified, but are useful as a

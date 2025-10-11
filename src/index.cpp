@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: In-Memory Vamana Index
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include <omp.h>
 
@@ -245,6 +249,7 @@ template <typename T, typename TagT, typename LabelT> size_t Index<T, TagT, Labe
 // 4 byte uint32_t)
 template <typename T, typename TagT, typename LabelT> size_t Index<T, TagT, LabelT>::save_graph(std::string graph_file)
 {
+    //_num_frozen_pts is 0 which is default; _start is the entry point is closest to the virual center of all points within this shard
     return _graph_store->store(graph_file, _nd + _num_frozen_pts, _num_frozen_pts, _start);
 }
 
@@ -763,44 +768,30 @@ bool Index<T, TagT, LabelT>::detect_common_filters(uint32_t point_id, bool searc
                                                    const std::vector<LabelT> &incoming_labels)
 {
     auto &curr_node_labels = _location_to_labels[point_id];
-    // Check for intersection between incoming_labels and curr_node_labels
-    // using two-pointer approach (both vectors are sorted)
-    auto it_inc = incoming_labels.begin();
-    auto it_curr = curr_node_labels.begin();
-
-    while (it_inc != incoming_labels.end() && it_curr != curr_node_labels.end())
+    std::vector<LabelT> common_filters;
+    std::set_intersection(incoming_labels.begin(), incoming_labels.end(), curr_node_labels.begin(),
+                          curr_node_labels.end(), std::back_inserter(common_filters));
+    if (common_filters.size() > 0)
     {
-        if (*it_inc < *it_curr)
-        {
-            ++it_inc;
-        }
-        else if (*it_curr < *it_inc)
-        {
-            ++it_curr;
-        }
-        else
-        {
-            // common label found
-            return true;
-        }
+        // This is to reduce the repetitive calls. If common_filters size is > 0 ,
+        // we dont need to check further for universal label
+        return true;
     }
-    // intersection empty; proceed to check the universal label logic
-    
     if (_use_universal_label)
     {
         if (!search_invocation)
         {
             if (std::find(incoming_labels.begin(), incoming_labels.end(), _universal_label) != incoming_labels.end() ||
                 std::find(curr_node_labels.begin(), curr_node_labels.end(), _universal_label) != curr_node_labels.end())
-                return true;
+                common_filters.push_back(_universal_label);
         }
         else
         {
             if (std::find(curr_node_labels.begin(), curr_node_labels.end(), _universal_label) != curr_node_labels.end())
-                return true;
+                common_filters.push_back(_universal_label);
         }
     }
-    return false;
+    return (common_filters.size() > 0);
 }
 
 template <typename T, typename TagT, typename LabelT>
@@ -1590,6 +1581,8 @@ void Index<T, TagT, LabelT>::_build(const DataType &data, const size_t num_point
         throw ANNException("Error" + std::string(e.what()), -1);
     }
 }
+
+//This is the one to use to build pageGraph with input of data
 template <typename T, typename TagT, typename LabelT>
 void Index<T, TagT, LabelT>::build(const T *data, const size_t num_points_to_load, const std::vector<TagT> &tags)
 {
@@ -1614,7 +1607,7 @@ void Index<T, TagT, LabelT>::build(const T *data, const size_t num_points_to_loa
 
     build_with_data_populated(tags);
 }
-
+///MARK: this is the one we use to build page graph with input of filename
 template <typename T, typename TagT, typename LabelT>
 void Index<T, TagT, LabelT>::build(const char *filename, const size_t num_points_to_load, const std::vector<TagT> &tags)
 {
@@ -1687,12 +1680,13 @@ void Index<T, TagT, LabelT>::build(const char *filename, const size_t num_points
         // there. The problem is that the Index class gets the output folder prefix
         // only at the time of save(), by which time we are too late. So leaving it
         // as-is for now.
+        //In C++, the U suffix on a number indicates that the literal is of type unsigned int
         _pq_data_store->populate_data(filename, 0U);
 #endif
     }
 
+    diskann::cout << "Begin to populate data into memory from file.. " << std::endl;
     _data_store->populate_data(filename, 0U);
-    diskann::cout << "Using only first " << num_points_to_load << " from file.. " << std::endl;
 
     {
         std::unique_lock<std::shared_timed_mutex> tl(_tag_lock);
@@ -2248,8 +2242,10 @@ template <typename T, typename TagT, typename LabelT> size_t Index<T, TagT, Labe
 
 template <typename T, typename TagT, typename LabelT> void Index<T, TagT, LabelT>::generate_frozen_point()
 {
-    if (_num_frozen_pts == 0)
+    if (_num_frozen_pts == 0){
+        diskann::cout << "There is no frozen point." << std::endl;
         return;
+    }
 
     if (_num_frozen_pts > 1)
     {

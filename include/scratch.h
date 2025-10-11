@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Search Scratch Space Management Header
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -146,11 +150,12 @@ template <typename T> class SSDQueryScratch : public AbstractScratch<T>
     char *sector_scratch = nullptr; // MUST BE AT LEAST [MAX_N_SECTOR_READS * SECTOR_LEN]
     size_t sector_idx = 0;          // index of next [SECTOR_LEN] scratch to use
 
-    tsl::robin_set<size_t> visited;
+    tsl::robin_set<uint32_t> visited;
+    tsl::robin_set<uint32_t> expandedPages;
     NeighborPriorityQueue retset;
     std::vector<Neighbor> full_retset;
 
-    SSDQueryScratch(size_t aligned_dim, size_t visited_reserve);
+    SSDQueryScratch(size_t aligned_dim, size_t visited_reserve, size_t nnodes_sector);
     ~SSDQueryScratch();
 
     void reset();
@@ -160,15 +165,17 @@ template <typename T> class SSDThreadData
 {
   public:
     SSDQueryScratch<T> scratch;
-    IOContext ctx;
+    //IOContext topo_ctx;
+    IOContext data_ctx;
 
-    SSDThreadData(size_t aligned_dim, size_t visited_reserve);
+    SSDThreadData(size_t aligned_dim, size_t visited_reserve, size_t nnodes_sector);
     void clear();
 };
 
 //
 // Class to avoid the hassle of pushing and popping the query scratch.
 //
+//T in our case is type pf SSDThreadData
 template <typename T> class ScratchStoreManager
 {
   public:

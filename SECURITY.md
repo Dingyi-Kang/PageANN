@@ -1,41 +1,62 @@
-<!-- BEGIN MICROSOFT SECURITY.MD V0.0.5 BLOCK -->
+# Security Policy
 
-## Security
+## Reporting Security Vulnerabilities
 
-Microsoft takes the security of our software products and services seriously, which includes all source code repositories managed through our GitHub organizations, which include [Microsoft](https://github.com/Microsoft), [Azure](https://github.com/Azure), [DotNet](https://github.com/dotnet), [AspNet](https://github.com/aspnet), [Xamarin](https://github.com/xamarin), and [our GitHub organizations](https://opensource.microsoft.com/).
+If you discover a security vulnerability in PageANN, please report it responsibly.
 
-If you believe you have found a security vulnerability in any Microsoft-owned repository that meets [Microsoft's definition of a security vulnerability](https://docs.microsoft.com/en-us/previous-versions/tn-archive/cc751383(v=technet.10)), please report it to us as described below.
+### How to Report
 
-## Reporting Security Issues
+Please report security vulnerabilities by emailing:
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+**dingyikangosu@gmail.com**
 
-Instead, please report them to the Microsoft Security Response Center (MSRC) at [https://msrc.microsoft.com/create-report](https://msrc.microsoft.com/create-report).
+Please include the following information in your report:
 
-If you prefer to submit without logging in, send email to [secure@microsoft.com](mailto:secure@microsoft.com).  If possible, encrypt your message with our PGP key; please download it from the [Microsoft Security Response Center PGP Key page](https://www.microsoft.com/en-us/msrc/pgp-key-msrc).
+- **Description**: Clear description of the vulnerability
+- **Impact**: Potential security impact and affected components
+- **Steps to Reproduce**: Detailed steps to reproduce the issue
+- **Affected Versions**: Which versions of PageANN are affected
+- **Proof of Concept**: If applicable, provide proof-of-concept code
+- **Suggested Fix**: If you have ideas for fixing the issue
 
-You should receive a response within 24 hours. If for some reason you do not, please follow up via email to ensure we received your original message. Additional information can be found at [microsoft.com/msrc](https://www.microsoft.com/msrc). 
+### Response Timeline
 
-Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
+- You will receive an acknowledgment within **72 hours**
+- We will provide a more detailed response within **7 days**
+- We will work to address verified vulnerabilities as quickly as possible
 
-  * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
-  * Full paths of source file(s) related to the manifestation of the issue
-  * The location of the affected source code (tag/branch/commit or direct URL)
-  * Any special configuration required to reproduce the issue
-  * Step-by-step instructions to reproduce the issue
-  * Proof-of-concept or exploit code (if possible)
-  * Impact of the issue, including how an attacker might exploit the issue
+### Disclosure Policy
 
-This information will help us triage your report more quickly.
+- Please do **not** disclose the vulnerability publicly until a fix is released
+- We will credit you for the discovery unless you prefer to remain anonymous
+- We will coordinate the disclosure timeline with you
 
-If you are reporting for a bug bounty, more complete reports can contribute to a higher bounty award. Please visit our [Microsoft Bug Bounty Program](https://microsoft.com/msrc/bounty) page for more details about our active programs.
+## Supported Versions
 
-## Preferred Languages
+| Version | Supported          |
+| ------- | ------------------ |
+| Latest  | :white_check_mark: |
+| Older   | :x:                |
 
-We prefer all communications to be in English.
+**Note**: We recommend always using the latest version of PageANN.
 
-## Policy
+## Security Best Practices
 
-Microsoft follows the principle of [Coordinated Vulnerability Disclosure](https://www.microsoft.com/en-us/msrc/cvd).
+When using PageANN:
 
-<!-- END MICROSOFT SECURITY.MD BLOCK -->
+1. **Input Validation**: Validate all input data before processing
+2. **File Permissions**: Ensure proper file permissions for index files
+3. **Resource Limits**: Set appropriate memory and I/O limits
+4. **Network Security**: If exposing PageANN over network, use proper authentication
+5. **Dependencies**: Keep all dependencies up to date
+
+## Known Security Considerations
+
+PageANN is primarily designed for trusted environments. Key considerations:
+
+- **No built-in authentication**: PageANN does not include user authentication
+- **File system access**: Requires read/write access to index files
+- **Memory usage**: Can consume significant memory for large indices
+- **DoS potential**: Malformed queries could cause resource exhaustion
+
+If deploying in production or untrusted environments, implement appropriate security controls at the application layer.

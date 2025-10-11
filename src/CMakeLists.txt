@@ -9,7 +9,7 @@ if(MSVC)
 else()
     #file(GLOB CPP_SOURCES *.cpp)
     set(CPP_SOURCES abstract_data_store.cpp ann_exception.cpp disk_utils.cpp 
-        distance.cpp index.cpp in_mem_graph_store.cpp in_mem_data_store.cpp
+        distance.cpp index.cpp in_mem_graph_store.cpp in_mem_data_store.cpp ooc_in_mem_graph_store.cpp ooc_in_mem_data_store.cpp
         linux_aligned_file_reader.cpp math_utils.cpp natural_number_map.cpp
         in_mem_data_store.cpp in_mem_graph_store.cpp
         natural_number_set.cpp memory_mapper.cpp partition.cpp pq.cpp

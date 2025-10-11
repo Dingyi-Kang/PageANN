@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Product Quantization (PQ) Header
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -25,9 +29,9 @@ class FixedChunkPQTable
     virtual ~FixedChunkPQTable();
 
 #ifdef EXEC_ENV_OLS
-    void load_pq_centroid_bin(MemoryMappedFiles &files, const char *pq_table_file, size_t num_chunks);
+    void load_pq_centroid_bin(MemoryMappedFiles &files, const char *pq_table_file, size_t &num_chunks);
 #else
-    void load_pq_centroid_bin(const char *pq_table_file, size_t num_chunks);
+    void load_pq_centroid_bin(const char *pq_table_file, size_t &num_chunks);
 #endif
 
     uint32_t get_num_chunks();

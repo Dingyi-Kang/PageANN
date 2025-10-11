@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Disk-based Index Construction and Utilities
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -117,9 +121,13 @@ class AlignedFileReader
     // process batch of aligned requests in parallel
     // NOTE :: blocking call
     virtual void read(std::vector<AlignedRead> &read_reqs, IOContext &ctx, bool async = false) = 0;
-
+#ifdef _WINDOWS
 #ifdef USE_BING_INFRA
     // wait for completion of one request in a batch of requests
     virtual void wait(IOContext &ctx, int &completedIndex) = 0;
+#endif
+#else
+  virtual int submit_reqs(std::vector<AlignedRead>& read_reqs, IOContext& ctx) = 0;
+  virtual void get_events(IOContext &ctx, int n_ops) = 0;
 #endif
 };

@@ -43,11 +43,6 @@ if (MSVC)
     message(STATUS "Invoking nuget to download Boost, OpenMP and MKL dependencies...")
     configure_file(${PROJECT_SOURCE_DIR}/windows/packages.config.in ${DISKANN_MSVC_PACKAGES_CONFIG})
     exec_program(${NUGET_EXE} ARGS install \"${DISKANN_MSVC_PACKAGES_CONFIG}\" -ExcludeVersion -OutputDirectory \"${DISKANN_MSVC_PACKAGES}\")
-    if (RESTAPI)
-	    set(DISKANN_MSVC_RESTAPI_PACKAGES_CONFIG ${CMAKE_BINARY_DIR}/restapi/packages.config)
-	    configure_file(${PROJECT_SOURCE_DIR}/windows/packages_restapi.config.in ${DISKANN_MSVC_RESTAPI_PACKAGES_CONFIG})
-        exec_program(${NUGET_EXE} ARGS install \"${DISKANN_MSVC_RESTAPI_PACKAGES_CONFIG}\" -ExcludeVersion -OutputDirectory \"${DISKANN_MSVC_PACKAGES}\")
-    endif()
     message(STATUS "Finished setting up nuget dependencies")
 endif()
 
@@ -305,25 +300,10 @@ if (NOT PYBIND)
     add_subdirectory(apps/utils)
 endif()
 
-if (UNIT_TEST)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
-
 if (MSVC)
     message(STATUS "The ${PROJECT_NAME}.sln has been created, opened it from VisualStudio to build Release or Debug configurations.\n"
                    "Alternatively, use MSBuild to build:\n\n"
                    "msbuild.exe ${PROJECT_NAME}.sln /m /nologo /t:Build /p:Configuration=\"Release\" /property:Platform=\"x64\"\n")
-endif()
-
-if (RESTAPI)
-    if (MSVC)
-        set(DISKANN_CPPRESTSDK "${DISKANN_MSVC_PACKAGES}/cpprestsdk.v142/build/native")
-        	# expected path for apt packaged intel mkl installs
-        link_libraries("${DISKANN_CPPRESTSDK}/x64/lib/cpprest142_2_10.lib")
-        include_directories("${DISKANN_CPPRESTSDK}/include")
-    endif()
-    add_subdirectory(apps/restapi)
 endif()
 
 include(clang-format.cmake)

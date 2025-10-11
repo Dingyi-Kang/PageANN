@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Page-level Graph Index Generation
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include <string>
 #include <iostream>
@@ -316,10 +320,11 @@ template <typename T> inline void save_bin(const std::string filename, T *data, 
     std::cout << "Finished writing bin" << std::endl;
 }
 
-inline void save_groundtruth_as_one_file(const std::string filename, int32_t *data, float *distances, size_t npts,
+inline void save_groundtruth_as_one_file(const std::string filename, uint32_t *data, float *distances, size_t npts,
                                          size_t ndims)
 {
     std::ofstream writer(filename, std::ios::binary | std::ios::out);
+    std::cout << "Open the file to write successfully. " << std::endl;
     int npts_i32 = (int)npts, ndims_i32 = (int)ndims;
     writer.write((char *)&npts_i32, sizeof(int));
     writer.write((char *)&ndims_i32, sizeof(int));
@@ -379,117 +384,111 @@ std::vector<std::vector<std::pair<uint32_t, float>>> processUnfilteredParts(cons
 
 template <typename T>
 int aux_main(const std::string &base_file, const std::string &query_file, const std::string &gt_file, size_t k,
-             const diskann::Metric &metric, const std::string &tags_file = std::string(""))
+             const diskann::Metric &metric, const std::string &index_prefix,  const std::string &vamana_gt_file = std::string(""))
 {
     size_t npoints, nqueries, dim;
-
     float *query_data;
 
-    load_bin_as_float<T>(query_file.c_str(), query_data, nqueries, dim, 0);
-    if (nqueries > PARTSIZE)
-        std::cerr << "WARNING: #Queries provided (" << nqueries << ") is greater than " << PARTSIZE
-                  << ". Computing GT only for the first " << PARTSIZE << " queries." << std::endl;
-
-    // load tags
-    const bool tags_enabled = tags_file.empty() ? false : true;
+    const bool skip_knn = vamana_gt_file.empty() ? false : true;
+    std::string tags_file = index_prefix + "_original_to_new_ids_map.bin";
+    const bool tags_enabled = tags_file.empty() ? false : true;    // load tags
     std::vector<uint32_t> location_to_tag = diskann::loadTags(tags_file, base_file);
+    std::cout << "Size of ids map: " << location_to_tag.size() << std::endl;
 
-    int *closest_points = new int[nqueries * k];
-    float *dist_closest_points = new float[nqueries * k];
+    load_bin_as_float<T>(query_file.c_str(), query_data, nqueries, dim, 0);
+    uint32_t *closest_points = new uint32_t[nqueries * k];
+    float *dist_closest_points = nullptr;
 
-    std::vector<std::vector<std::pair<uint32_t, float>>> results =
-        processUnfilteredParts<T>(base_file, nqueries, npoints, dim, k, query_data, metric, location_to_tag);
+    if (skip_knn & tags_enabled){
+        //load data from vamana_gt_file into original_closest_points and dist_closest_points
+        uint32_t *original_closest_points = nullptr;
+        size_t gt_num, gt_dim;
+        diskann::load_truthset(vamana_gt_file, original_closest_points, dist_closest_points, gt_num, gt_dim);
 
-    for (size_t i = 0; i < nqueries; i++)
-    {
-        std::vector<std::pair<uint32_t, float>> &cur_res = results[i];
-        std::sort(cur_res.begin(), cur_res.end(), custom_dist);
-        size_t j = 0;
-        for (auto iter : cur_res)
-        {
-            if (j == k)
-                break;
-            if (tags_enabled)
-            {
-                std::uint32_t index_with_tag = location_to_tag[iter.first];
-                closest_points[i * k + j] = (int32_t)index_with_tag;
-            }
-            else
-            {
-                closest_points[i * k + j] = (int32_t)iter.first;
-            }
-
-            if (metric == diskann::Metric::INNER_PRODUCT)
-                dist_closest_points[i * k + j] = -iter.second;
-            else
-                dist_closest_points[i * k + j] = iter.second;
-
-            ++j;
+        if (nqueries != gt_num){
+            std::cout << "Error: the number of queries in gt file, which is " << gt_num << ", doesn't match with that request " << nqueries << std::endl;
         }
-        if (j < k)
-            std::cout << "WARNING: found less than k GT entries for query " << i << std::endl;
+
+        if (gt_dim != k){
+            std::cout << "Error: the number of k in gt file, which is " << gt_dim << ", doesn't match with that request " << k << std::endl;
+        }
+
+        //convert it into new ids and save them in closest_points
+        for (size_t i = 0; i < nqueries; i++)
+        {
+            for(size_t j = 0; j < k; j++){
+                //closest_points[i * k + j] = location_to_tag[original_closest_points[i * k + j]];
+                auto id = original_closest_points[i * k + j];
+                if (id >= location_to_tag.size()) {
+                    std::cerr << "Error: id " << id << " out of range (max "
+                           << location_to_tag.size()-1 << ")\n";
+                    return -1;
+                }
+                closest_points[i * k + j] = location_to_tag[id];
+            }
+        }
+        delete[] original_closest_points;
+    }
+    else{
+        dist_closest_points = new float[nqueries * k];
+        std::cout << "Conduct knn. " << std::endl;
+        
+        if (nqueries > PARTSIZE)
+            std::cerr << "WARNING: #Queries provided (" << nqueries << ") is greater than " << PARTSIZE
+                    << ". Computing GT only for the first " << PARTSIZE << " queries." << std::endl;
+
+        std::vector<std::vector<std::pair<uint32_t, float>>> results =
+            processUnfilteredParts<T>(base_file, nqueries, npoints, dim, k, query_data, metric, location_to_tag);
+        
+        std::cout << "Done with knn. " << std::endl;
+        
+        for (size_t i = 0; i < nqueries; i++)
+        {
+            std::vector<std::pair<uint32_t, float>> &cur_res = results[i];
+            std::sort(cur_res.begin(), cur_res.end(), custom_dist);
+            size_t j = 0;
+            for (auto iter : cur_res)
+            {
+                if (j == k)
+                    break;
+                if (tags_enabled)
+                {
+                    //std::cout << "Accessing ids map." << std::endl;
+                    closest_points[i * k + j] = location_to_tag[iter.first];
+                }
+                else
+                {
+                    closest_points[i * k + j] = iter.first;
+                }
+
+                if (metric == diskann::Metric::INNER_PRODUCT)
+                    dist_closest_points[i * k + j] = -iter.second;
+                else
+                    //std::cout << "Accessing dist array." << std::endl;
+                    dist_closest_points[i * k + j] = iter.second;
+
+                ++j;
+            }
+            if (j < k)
+                std::cout << "WARNING: found less than k GT entries for query " << i << std::endl;
+        }
     }
 
+    std::cout << "Done with prepration. Begin to write file." << std::endl;
+
     save_groundtruth_as_one_file(gt_file, closest_points, dist_closest_points, nqueries, k);
+
     delete[] closest_points;
-    delete[] dist_closest_points;
+    if (dist_closest_points != nullptr)
+        delete[] dist_closest_points;
     diskann::aligned_free(query_data);
 
     return 0;
 }
 
-void load_truthset(const std::string &bin_file, uint32_t *&ids, float *&dists, size_t &npts, size_t &dim)
-{
-    size_t read_blk_size = 64 * 1024 * 1024;
-    cached_ifstream reader(bin_file, read_blk_size);
-    diskann::cout << "Reading truthset file " << bin_file.c_str() << " ..." << std::endl;
-    size_t actual_file_size = reader.get_file_size();
-
-    int npts_i32, dim_i32;
-    reader.read((char *)&npts_i32, sizeof(int));
-    reader.read((char *)&dim_i32, sizeof(int));
-    npts = (uint32_t)npts_i32;
-    dim = (uint32_t)dim_i32;
-
-    diskann::cout << "Metadata: #pts = " << npts << ", #dims = " << dim << "... " << std::endl;
-
-    int truthset_type = -1; // 1 means truthset has ids and distances, 2 means
-                            // only ids, -1 is error
-    size_t expected_file_size_with_dists = 2 * npts * dim * sizeof(uint32_t) + 2 * sizeof(uint32_t);
-
-    if (actual_file_size == expected_file_size_with_dists)
-        truthset_type = 1;
-
-    size_t expected_file_size_just_ids = npts * dim * sizeof(uint32_t) + 2 * sizeof(uint32_t);
-
-    if (actual_file_size == expected_file_size_just_ids)
-        truthset_type = 2;
-
-    if (truthset_type == -1)
-    {
-        std::stringstream stream;
-        stream << "Error. File size mismatch. File should have bin format, with "
-                  "npts followed by ngt followed by npts*ngt ids and optionally "
-                  "followed by npts*ngt distance values; actual size: "
-               << actual_file_size << ", expected: " << expected_file_size_with_dists << " or "
-               << expected_file_size_just_ids;
-        diskann::cout << stream.str();
-        throw diskann::ANNException(stream.str(), -1, __FUNCSIG__, __FILE__, __LINE__);
-    }
-
-    ids = new uint32_t[npts * dim];
-    reader.read((char *)ids, npts * dim * sizeof(uint32_t));
-
-    if (truthset_type == 1)
-    {
-        dists = new float[npts * dim];
-        reader.read((char *)dists, npts * dim * sizeof(float));
-    }
-}
-
 int main(int argc, char **argv)
 {
-    std::string data_type, dist_fn, base_file, query_file, gt_file, tags_file;
+    std::string data_type, dist_fn, base_file, query_file, gt_file, index_prefix, vamana_gt_file;
     uint64_t K;
 
     try
@@ -513,8 +512,11 @@ int main(int argc, char **argv)
                            "else it will save the file as filename_label.bin");
         desc.add_options()("K", po::value<uint64_t>(&K)->required(),
                            "Number of ground truth nearest neighbors to compute");
-        desc.add_options()("tags_file", po::value<std::string>(&tags_file)->default_value(std::string()),
-                           "File containing the tags in binary format");
+        desc.add_options()("index_prefix", po::value<std::string>(&index_prefix)->required(),
+                           "Prefix of the file containing the tags in binary format");
+        desc.add_options()("vamana_gt_file", po::value<std::string>(&vamana_gt_file)->default_value(std::string()),
+                           "File name for already generated ground truth file "
+                           " which is based on the order of the original base file");
 
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -559,11 +561,11 @@ int main(int argc, char **argv)
     try
     {
         if (data_type == std::string("float"))
-            aux_main<float>(base_file, query_file, gt_file, K, metric, tags_file);
+            aux_main<float>(base_file, query_file, gt_file, K, metric, index_prefix, vamana_gt_file);
         if (data_type == std::string("int8"))
-            aux_main<int8_t>(base_file, query_file, gt_file, K, metric, tags_file);
+            aux_main<int8_t>(base_file, query_file, gt_file, K, metric, index_prefix, vamana_gt_file);
         if (data_type == std::string("uint8"))
-            aux_main<uint8_t>(base_file, query_file, gt_file, K, metric, tags_file);
+            aux_main<uint8_t>(base_file, query_file, gt_file, K, metric, index_prefix, vamana_gt_file);
     }
     catch (const std::exception &e)
     {

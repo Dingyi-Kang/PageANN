@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Disk-based Index Construction and Utilities
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -38,6 +42,7 @@ class AbstractGraphStore
     virtual void clear_graph() = 0;
 
     virtual uint32_t get_max_observed_degree() = 0;
+    virtual size_t getGraphNodesNum() const = 0;
 
     // set during load
     virtual size_t get_max_range_of_graph() = 0;
@@ -58,6 +63,15 @@ class AbstractGraphStore
     size_t get_reserve_graph_degree()
     {
         return _reserve_graph_degree;
+    }
+
+    size_t capacity()
+    {
+        return _capacity;
+    }
+
+    void set_capacity(size_t new_capacity){
+        _capacity = new_capacity;
     }
 
   private:

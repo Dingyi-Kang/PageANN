@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Windows Aligned File I/O
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #ifdef _WINDOWS
 #ifndef USE_BING_INFRA
@@ -17,8 +21,8 @@ void WindowsAlignedFileReader::open(const std::string &fname)
 #else
     m_filename = fname;
 #endif
-
-    this->register_thread();
+    //no need to call it manually -- since we will call it in the setup_thread_data
+    //this->register_thread();
 }
 
 void WindowsAlignedFileReader::close()
@@ -88,9 +92,19 @@ IOContext &WindowsAlignedFileReader::get_ctx()
 void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOContext &ctx, bool async)
 {
     using namespace std::chrono_literals;
+
+    // Retrieve the file size
+    // LARGE_INTEGER file_size;
+    // if (!GetFileSizeEx(ctx.fhandle, &file_size)) {
+    //     DWORD error = GetLastError();
+    //     diskann::cerr << "Failed to get file size, error code: " << error << std::endl;
+    //     throw diskann::ANNException("Failed to get file size", error, __FUNCSIG__, __FILE__, __LINE__);
+    // }
+
     // execute each request sequentially
     size_t n_reqs = read_reqs.size();
     uint64_t n_batches = ROUND_UP(n_reqs, MAX_IO_DEPTH) / MAX_IO_DEPTH;
+    //diskann::cout << "p1 " << std::endl;
     for (uint64_t i = 0; i < n_batches; i++)
     {
         // reset all OVERLAPPED objects
@@ -107,6 +121,7 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
               }
             */
         }
+        //diskann::cout << "p2.1 " << std::endl;
 
         // batch start/end
         uint64_t batch_start = MAX_IO_DEPTH * i;
@@ -125,9 +140,20 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
             assert(IS_ALIGNED(offset, SECTOR_LEN));
             assert(IS_ALIGNED(nbytes, SECTOR_LEN));
 
+            // if (offset >= (uint64_t)file_size.QuadPart || (offset + nbytes) > (uint64_t)file_size.QuadPart) {
+            //     diskann::cerr << "Attempt to read beyond file size. Offset: " << offset << ", Size: " << nbytes << ", File size: " << file_size.QuadPart << std::endl;
+            //     throw diskann::ANNException("Attempt to read beyond file size", ERROR_HANDLE_EOF, __FUNCSIG__, __FILE__, __LINE__);
+            // }
+
             // fill in OVERLAPPED struct
             os.Offset = offset & 0xffffffff;
             os.OffsetHigh = (offset >> 32);
+
+            // Ensure file handle is valid
+            if (ctx.fhandle == INVALID_HANDLE_VALUE) {
+                diskann::cerr << "Invalid file handle" << std::endl;
+                throw diskann::ANNException("Invalid file handle", ERROR_INVALID_HANDLE, __FUNCSIG__, __FILE__, __LINE__);
+            }
 
             BOOL ret = ReadFile(ctx.fhandle, read_buf, (DWORD)nbytes, NULL, &os);
             if (ret == FALSE)
@@ -135,6 +161,7 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
                 auto error = GetLastError();
                 if (error != ERROR_IO_PENDING)
                 {
+                    //this error also show off sometime
                     diskann::cerr << "Error queuing IO -- " << error << "\n";
                 }
             }
@@ -143,22 +170,26 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
                 diskann::cerr << "Error queueing IO -- ReadFile returned TRUE" << std::endl;
             }
         }
+        //diskann::cout << "p2.2 " << std::endl;
         DWORD n_read = 0;
         uint64_t n_complete = 0;
         ULONG_PTR completion_key = 0;
         OVERLAPPED *lp_os;
+        
         while (n_complete < batch_size)
         {
             if (GetQueuedCompletionStatus(ctx.iocp, &n_read, &completion_key, &lp_os, INFINITE) != 0)
             {
                 // successfully dequeued a completed I/O
                 n_complete++;
+                //diskann::cout << "p2.3-success " << std::endl;
             }
             else
             {
                 // failed to dequeue OR dequeued failed I/O
                 if (lp_os == NULL)
                 {
+                    //diskann::cout << "p2.3.1-fail " << std::endl;
                     DWORD error = GetLastError();
                     if (error != WAIT_TIMEOUT)
                     {
@@ -175,6 +206,8 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
                 else
                 {
                     // completion packet for failed IO dequeued
+                    ///TODO: understand why threw error here
+                    //diskann::cout << "p2.3.2-fail " << std::endl;
                     auto op_idx = lp_os - ctx.reqs.data();
                     std::stringstream stream;
                     stream << "I/O failed , offset: " << read_reqs[op_idx].offset
@@ -183,7 +216,9 @@ void WindowsAlignedFileReader::read(std::vector<AlignedRead> &read_reqs, IOConte
                 }
             }
         }
+        //diskann::cout << "p2.4 " << std::endl;
     }
+    //diskann::cout << "end " << std::endl;
 }
 #endif
 #endif

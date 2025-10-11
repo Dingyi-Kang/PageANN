@@ -1,113 +1,130 @@
-# DiskANN
+# PageANN
 
-[![DiskANN Main](https://github.com/microsoft/DiskANN/actions/workflows/push-test.yml/badge.svg?branch=main)](https://github.com/microsoft/DiskANN/actions/workflows/push-test.yml)
-[![PyPI version](https://img.shields.io/pypi/v/diskannpy.svg)](https://pypi.org/project/diskannpy/)
-[![Downloads shield](https://pepy.tech/badge/diskannpy)](https://pepy.tech/project/diskannpy)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A page-level approximate nearest neighbor search system optimized for SSD-based workloads.
 
-[![DiskANN Paper](https://img.shields.io/badge/Paper-NeurIPS%3A_DiskANN-blue)](https://papers.nips.cc/paper/9527-rand-nsg-fast-accurate-billion-point-nearest-neighbor-search-on-a-single-node.pdf)
-[![DiskANN Paper](https://img.shields.io/badge/Paper-Arxiv%3A_Fresh--DiskANN-blue)](https://arxiv.org/abs/2105.09613)
-[![DiskANN Paper](https://img.shields.io/badge/Paper-Filtered--DiskANN-blue)](https://harsha-simhadri.org/pubs/Filtered-DiskANN23.pdf)
+## About
 
+PageANN extends Microsoft's [DiskANN](https://github.com/microsoft/DiskANN) with page-level graph organization to reduce random I/O and improve SSD utilization during vector search.
 
-DiskANN is a suite of scalable, accurate and cost-effective approximate nearest neighbor search algorithms for large-scale vector search that support real-time changes and simple filters.
-This code is based on ideas from the [DiskANN](https://papers.nips.cc/paper/9527-rand-nsg-fast-accurate-billion-point-nearest-neighbor-search-on-a-single-node.pdf), [Fresh-DiskANN](https://arxiv.org/abs/2105.09613) and the [Filtered-DiskANN](https://harsha-simhadri.org/pubs/Filtered-DiskANN23.pdf) papers with further improvements. 
-This code forked off from [code for NSG](https://github.com/ZJULearning/nsg) algorithm.
+### Key Differences from DiskANN
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+- **Page-level indexing**: Multiple vectors are merged into disk-aligned pages
+- **Reduced I/O**: Fewer random accesses during graph traversal
+- **SSD-optimized**: Better utilization of SSD bandwidth and parallelism
 
-See [guidelines](CONTRIBUTING.md) for contributing to this project.
+## Citation
 
-## Linux build:
+If you use PageANN in your research, please cite:
 
-Install the following packages through apt-get
-
-```bash
-sudo apt install make cmake g++ libaio-dev libgoogle-perftools-dev clang-format libboost-all-dev
+```bibtex
+@article{kang2025pageann,
+  title={Scalable Disk-Based Approximate Nearest Neighbor Search with Page-Aligned Graph},
+  author={Kang, Dingyi and Jiang, Dongming and Yang, Hanshen and Liu, Hang and Li, Bingzhe},
+  journal={arXiv preprint arXiv:2509.25487},
+  year={2025},
+  url={https://www.arxiv.org/abs/2509.25487}
+}
 ```
 
-### Install Intel MKL
-#### Ubuntu 20.04 or newer
+## Credits
+
+This project is built upon Microsoft Research's DiskANN:
+- DiskANN repository: https://github.com/microsoft/DiskANN
+- Original paper: Subramanya et al., "DiskANN: Fast Accurate Billion-point Nearest Neighbor Search on a Single Node", NeurIPS 2019
+
+**Original DiskANN**: Copyright (c) Microsoft Corporation
+**PageANN Modifications**: Copyright (c) 2025 Dingyi Kang
+
+## Author
+
+**Dingyi Kang**
+Email: dingyikangosu@gmail.com
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+This project contains:
+- DiskANN components: Copyright (c) Microsoft Corporation
+- PageANN modifications: Copyright (c) 2025 Dingyi Kang
+
+## Building PageANN
+
+### Prerequisites
+
+**Linux (Ubuntu 20.04+)**:
 ```bash
+sudo apt install make cmake g++ libaio-dev libgoogle-perftools-dev clang-format libboost-all-dev
 sudo apt install libmkl-full-dev
 ```
 
-#### Earlier versions of Ubuntu
-Install Intel MKL either by downloading the [oneAPI MKL installer](https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html) or using [apt](https://software.intel.com/en-us/articles/installing-intel-free-libs-and-python-apt-repo) (we tested with build 2019.4-070 and 2022.1.2.146).
+**Earlier Ubuntu versions**: Install Intel MKL manually from [oneAPI MKL installer](https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl.html)
 
-```
-# OneAPI MKL Installer
-wget https://registrationcenter-download.intel.com/akdlm/irc_nas/18487/l_BaseKit_p_2022.1.2.146.sh
-sudo sh l_BaseKit_p_2022.1.2.146.sh -a --components intel.oneapi.lin.mkl.devel --action install --eula accept -s
-```
+### Build Instructions
 
-### Build
 ```bash
-mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j 
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j
 ```
 
-## Windows build:
+## Usage
 
-The Windows version has been tested with Enterprise editions of Visual Studio 2022, 2019 and 2017. It should work with the Community and Professional editions as well without any changes. 
+For detailed workflow and command-line instructions, see:
+- **[PageANN Usage Guide](workflows/PageANN_usage.md)**: Complete workflow for building and searching PageANN indexes
+- **[Paper Experiments Parameters](workflows/Paper%20experiments%20parameters.md)**: Exact parameters to reproduce results from our paper
 
-**Prerequisites:**
+### 1. Build Vamana Vector-Level Index
 
-* CMake 3.15+ (available in VisualStudio 2019+ or from https://cmake.org)
-* NuGet.exe (install from https://www.nuget.org/downloads)
-    * The build script will use NuGet to get MKL, OpenMP and Boost packages.
-* DiskANN git repository checked out together with submodules. To check out submodules after git clone:
-```
-git submodule init
-git submodule update
-```
-
-* Environment variables: 
-    * [optional] If you would like to override the Boost library listed in windows/packages.config.in, set BOOST_ROOT to your Boost folder.
-
-**Build steps:**
-* Open the "x64 Native Tools Command Prompt for VS 2019" (or corresponding version) and change to DiskANN folder
-* Create a "build" directory inside it
-* Change to the "build" directory and run
-```
-cmake ..
-```
-OR for Visual Studio 2017 and earlier:
-```
-<full-path-to-installed-cmake>\cmake ..
-```
-**This will create a diskann.sln solution**. Now you can:
-
-- Open it from VisualStudio and build either Release or Debug configuration.
-- `<full-path-to-installed-cmake>\cmake --build build`
-- Use MSBuild:
-```
-msbuild.exe diskann.sln /m /nologo /t:Build /p:Configuration="Release" /property:Platform="x64"
+```bash
+./build_vamana_disk_index \
+  --data_type float \
+  --dist_fn l2 \
+  --data_path base_vectors.bin \
+  --index_path_prefix index_vamana \
+  -R 64 -L 100 \
+  -B 8.0 -M 16.0
 ```
 
-* This will also build gperftools submodule for libtcmalloc_minimal dependency.
-* Generated binaries are stored in the x64/Release or x64/Debug directories.
+### 2. Generate Page-Level Graph
 
-## Usage:
-
-Please see the following pages on using the compiled code:
-
-- [Commandline interface for building and search SSD based indices](workflows/SSD_index.md)  
-- [Commandline interface for building and search in memory indices](workflows/in_memory_index.md) 
-- [Commandline examples for using in-memory streaming indices](workflows/dynamic_index.md)
-- [Commandline interface for building and search in memory indices with label data and filters](workflows/filtered_in_memory.md)
-- [Commandline interface for building and search SSD based indices with label data and filters](workflows/filtered_ssd_index.md)
-- [diskannpy - DiskANN as a python extension module](python/README.md)
-
-Please cite this software in your work as:
-
+```bash
+./generate_page_graph \
+  --data_type float \
+  --dist_fn l2 \
+  --data_path base_vectors.bin \
+  --vamana_index_path_prefix index_vamana \
+  --min_degree_per_node 32 \
+  --num_PQ_chunks 12 \
+  --R 64 \
+  --mem_budget_in_GB 8.0 \
+  --full_ooc false
 ```
-@misc{diskann-github,
-   author = {Simhadri, Harsha Vardhan and Krishnaswamy, Ravishankar and Srinivasa, Gopal and Subramanya, Suhas Jayaram and Antonijevic, Andrija and Pryce, Dax and Kaczynski, David and Williams, Shane and Gollapudi, Siddarth and Sivashankar, Varun and Karia, Neel and Singh, Aditi and Jaiswal, Shikhar and Mahapatro, Neelam and Adams, Philip and Tower, Bryan and Patel, Yash}},
-   title = {{DiskANN: Graph-structured Indices for Scalable, Fast, Fresh and Filtered Approximate Nearest Neighbor Search}},
-   url = {https://github.com/Microsoft/DiskANN},
-   version = {0.6.1},
-   year = {2023}
-}
+
+### 3. Search Page Index
+
+```bash
+./search_disk_index \
+  --data_type float \
+  --dist_fn l2 \
+  --index_path_prefix page_index \
+  --query_file queries.bin \
+  --gt_file ground_truth.bin \
+  -K 10 -L 50 100 150 \
+  --result_path results.txt
 ```
+
+## Key Tools
+
+- `build_vamana_disk_index`: Build Vamana vector-level disk index
+- `generate_page_graph`: Convert Vamana index to page-level graph
+- `recommend_vamana_graph_degree`: Recommend optimal graph degree parameters
+- `search_disk_index`: Search the page-level index
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+## Acknowledgments
+
+Special thanks to Microsoft Research for open-sourcing DiskANN, which forms the foundation of this work.

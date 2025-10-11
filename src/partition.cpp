@@ -29,7 +29,7 @@
 #define BLOCK_SIZE 5000000
 
 // #define SAVE_INFLATED_PQ true
-
+//this is the one we use 
 template <typename T>
 void gen_random_slice(const std::string base_file, const std::string output_prefix, double sampling_rate)
 {

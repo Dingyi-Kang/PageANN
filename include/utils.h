@@ -1,5 +1,9 @@
 ﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Core Utilities and Distance Functions Header
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -258,6 +262,8 @@ inline void alloc_aligned(void **ptr, size_t size, size_t align)
     *ptr = nullptr;
     if (IS_ALIGNED(size, align) == 0)
         report_misalignment_of_requested_size(align);
+    //aligned_alloc is a function provided by the C11 standard for allocating memory with a specified alignment. 
+    //It allows you to allocate a block of memory where the starting address is a multiple of a specified alignment value
 #ifndef _WINDOWS
     *ptr = ::aligned_alloc(align, size);
 #else
@@ -359,6 +365,10 @@ inline void get_bin_metadata(MemoryMappedFiles &files, const std::string &bin_fi
 inline void get_bin_metadata(const std::string &bin_file, size_t &nrows, size_t &ncols, size_t offset = 0)
 {
     std::ifstream reader(bin_file.c_str(), std::ios::binary);
+    if (!reader.is_open()) {
+        std::cerr << "Error: Failed to open file: " << bin_file << std::endl;
+        // Handle the error (return, throw, etc.)
+    }
     get_bin_metadata_impl(reader, nrows, ncols, offset);
 }
 // get_bin_metadata functions END
@@ -679,10 +689,6 @@ DISKANN_DLLEXPORT double calculate_recall(unsigned num_queries, unsigned *gold_s
                                           unsigned *our_results, unsigned dim_or, unsigned recall_at,
                                           const tsl::robin_set<unsigned> &active_tags);
 
-DISKANN_DLLEXPORT double calculate_range_search_recall(unsigned num_queries,
-                                                       std::vector<std::vector<uint32_t>> &groundtruth,
-                                                       std::vector<std::vector<uint32_t>> &our_results);
-
 template <typename T>
 inline void load_bin(const std::string &bin_file, std::unique_ptr<T[]> &data, size_t &npts, size_t &dim,
                      size_t offset = 0)
@@ -959,7 +965,7 @@ inline size_t save_data_in_base_dimensions(const std::string &filename, T *data,
 }
 
 template <typename T>
-inline void copy_aligned_data_from_file(const char *bin_file, T *&data, size_t &npts, size_t &dim,
+inline void copy_aligned_data_from_file(const char *bin_file, T *&data, size_t &npts_to_load, size_t &dim,
                                         const size_t &rounded_dim, size_t offset = 0)
 {
     if (data == nullptr)
@@ -977,14 +983,15 @@ inline void copy_aligned_data_from_file(const char *bin_file, T *&data, size_t &
     int npts_i32, dim_i32;
     reader.read((char *)&npts_i32, sizeof(int));
     reader.read((char *)&dim_i32, sizeof(int));
-    npts = (unsigned)npts_i32;
+    npts_to_load = (unsigned)npts_i32;
     dim = (unsigned)dim_i32;
 
-    for (size_t i = 0; i < npts; i++)
+    for (size_t i = 0; i < npts_to_load; i++)
     {
         reader.read((char *)(data + i * rounded_dim), dim * sizeof(T));
         memset(data + i * rounded_dim + dim, 0, (rounded_dim - dim) * sizeof(T));
     }
+    reader.close();
 }
 
 // NOTE :: good efficiency when total_vec_size is integral multiple of 64

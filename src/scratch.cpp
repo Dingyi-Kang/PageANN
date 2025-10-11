@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Search Scratch Space Management
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include <vector>
 #include <boost/dynamic_bitset.hpp>
@@ -89,25 +93,27 @@ template <typename T> void SSDQueryScratch<T>::reset()
 {
     sector_idx = 0;
     visited.clear();
+    expandedPages.clear();
     retset.clear();
     full_retset.clear();
 }
 
-template <typename T> SSDQueryScratch<T>::SSDQueryScratch(size_t aligned_dim, size_t visited_reserve)
+template <typename T> SSDQueryScratch<T>::SSDQueryScratch(size_t aligned_dim, size_t visited_reserve, size_t nnodes_sector)
 {
     size_t coord_alloc_size = ROUND_UP(sizeof(T) * aligned_dim, 256);
-
     diskann::alloc_aligned((void **)&coord_scratch, coord_alloc_size, 256);
     diskann::alloc_aligned((void **)&sector_scratch, defaults::MAX_N_SECTOR_READS * defaults::SECTOR_LEN,
-                           defaults::SECTOR_LEN);
-    diskann::alloc_aligned((void **)&this->_aligned_query_T, aligned_dim * sizeof(T), 8 * sizeof(T));
-
+                           defaults::SECTOR_LEN);////const uint64_t MAX_N_SECTOR_READS = 128;
+    ///MARK: it needs to aligned with 0 cuz AXV load 8 floats at a time
+    diskann::alloc_aligned((void **)&this->_aligned_query_T, aligned_dim * sizeof(T), 8 * sizeof(T)); 
+    //field declared in the abstrastScratch class
     this->_pq_scratch = new PQScratch<T>(defaults::MAX_GRAPH_DEGREE, aligned_dim);
 
     memset(coord_scratch, 0, coord_alloc_size);
     memset(this->_aligned_query_T, 0, aligned_dim * sizeof(T));
 
-    visited.reserve(visited_reserve);
+    visited.reserve(visited_reserve);//visited_reserve == 4096 is a hard-coded number used by default
+    expandedPages.reserve(visited_reserve/nnodes_sector);
     full_retset.reserve(visited_reserve);
 }
 
@@ -121,7 +127,7 @@ template <typename T> SSDQueryScratch<T>::~SSDQueryScratch()
 }
 
 template <typename T>
-SSDThreadData<T>::SSDThreadData(size_t aligned_dim, size_t visited_reserve) : scratch(aligned_dim, visited_reserve)
+SSDThreadData<T>::SSDThreadData(size_t aligned_dim, size_t visited_reserve, size_t nnodes_sector) : scratch(aligned_dim, visited_reserve, nnodes_sector)
 {
 }
 
@@ -131,11 +137,15 @@ template <typename T> void SSDThreadData<T>::clear()
 }
 
 template <typename T> PQScratch<T>::PQScratch(size_t graph_degree, size_t aligned_dim)
-{
-    diskann::alloc_aligned((void **)&aligned_pq_coord_scratch,
-                           (size_t)graph_degree * (size_t)MAX_PQ_CHUNKS * sizeof(uint8_t), 256);
+{   
+    //this is used to the PQ ids of curr node's neighbors
+    diskann::alloc_aligned((void **)&aligned_pq_coord_scratch, (size_t)graph_degree * (size_t)MAX_PQ_CHUNKS * sizeof(uint8_t), 256);
+    //pqtable --  store precomputed distances between each of the 256 possible values (number of centroids) of the quantized vectors (chunks/sub-vectors) and the query vector subspaces.
+    //The alignment of 256 bytes ensures that memory access is optimized for modern CPU architectures, which can significantly improve performance by reducing cache misses and making better use of SIMD (Single Instruction, Multiple Data) instructions.
     diskann::alloc_aligned((void **)&aligned_pqtable_dist_scratch, 256 * (size_t)MAX_PQ_CHUNKS * sizeof(float), 256);
+    //pq distances of neibors to the current node
     diskann::alloc_aligned((void **)&aligned_dist_scratch, (size_t)graph_degree * sizeof(float), 256);
+    //query's real value
     diskann::alloc_aligned((void **)&aligned_query_float, aligned_dim * sizeof(float), 8 * sizeof(float));
     diskann::alloc_aligned((void **)&rotated_query, aligned_dim * sizeof(float), 8 * sizeof(float));
 

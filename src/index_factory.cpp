@@ -1,3 +1,10 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
+//
+// PageANN: Page-level Graph Index Generation
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
+
 #include "index_factory.h"
 #include "pq_l2_distance.h"
 
@@ -80,6 +87,24 @@ std::shared_ptr<AbstractDataStore<T>> IndexFactory::construct_datastore(DataStor
     return nullptr;
 }
 
+template <typename T>
+std::shared_ptr<InMemOOCDataStore<T>> IndexFactory::construct_ooc_datastore(DataStoreStrategy strategy,
+                                                                        size_t total_internal_points, size_t dimension,
+                                                                        Metric metric)
+{
+    std::unique_ptr<Distance<T>> distance;
+    switch (strategy)
+    {
+    case DataStoreStrategy::MEMORY:
+        distance.reset(construct_inmem_distance_fn<T>(metric));
+        return std::make_shared<diskann::InMemOOCDataStore<T>>((location_t)total_internal_points, dimension,
+                                                            std::move(distance));
+    default:
+        break;
+    }
+    return nullptr;
+}
+
 std::unique_ptr<AbstractGraphStore> IndexFactory::construct_graphstore(const GraphStoreStrategy strategy,
                                                                        const size_t size,
                                                                        const size_t reserve_graph_degree)
@@ -88,6 +113,19 @@ std::unique_ptr<AbstractGraphStore> IndexFactory::construct_graphstore(const Gra
     {
     case GraphStoreStrategy::MEMORY:
         return std::make_unique<InMemGraphStore>(size, reserve_graph_degree);
+    default:
+        throw ANNException("Error : Current GraphStoreStratagy is not supported.", -1);
+    }
+}
+
+std::shared_ptr<InMemOOCGraphStore> IndexFactory::construct_ooc_graphstore(const GraphStoreStrategy strategy,
+    const size_t size,
+    const size_t reserve_graph_degree)
+{
+    switch (strategy)
+    {
+    case GraphStoreStrategy::MEMORY:
+        return std::make_shared<InMemOOCGraphStore>(size, reserve_graph_degree);
     default:
         throw ANNException("Error : Current GraphStoreStratagy is not supported.", -1);
     }
@@ -210,4 +248,10 @@ std::unique_ptr<AbstractIndex> IndexFactory::create_instance(const std::string &
 // template DISKANN_DLLEXPORT std::shared_ptr<AbstractDataStore<float>> IndexFactory::construct_datastore(
 //     DataStoreStrategy stratagy, size_t num_points, size_t dimension, Metric m);
 
+template DISKANN_DLLEXPORT std::shared_ptr<InMemOOCDataStore<uint8_t>> IndexFactory::construct_ooc_datastore(
+    DataStoreStrategy stratagy, size_t num_points, size_t dimension, Metric m);
+template DISKANN_DLLEXPORT std::shared_ptr<InMemOOCDataStore<int8_t>> IndexFactory::construct_ooc_datastore(
+    DataStoreStrategy stratagy, size_t num_points, size_t dimension, Metric m);
+template DISKANN_DLLEXPORT std::shared_ptr<InMemOOCDataStore<float>> IndexFactory::construct_ooc_datastore(
+    DataStoreStrategy stratagy, size_t num_points, size_t dimension, Metric m);
 } // namespace diskann

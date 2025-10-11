@@ -143,7 +143,7 @@ class cached_ofstream
     {
         // dump any remaining data in memory
         if (cur_off > 0)
-        {
+        {   
             this->flush_cache();
         }
 
@@ -155,6 +155,7 @@ class cached_ofstream
 
         if (writer.is_open())
             writer.close();
+        
         diskann::cout << "Finished writing " << fsize << "B" << std::endl;
     }
 

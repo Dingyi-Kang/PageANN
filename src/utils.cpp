@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Core Utilities and Distance Functions
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include "utils.h"
 
@@ -125,9 +129,51 @@ void normalize_data_file(const std::string &inFileName, const std::string &outFi
 
     diskann::cout << "Wrote normalized points to file: " << outFileName << std::endl;
 }
+//may need to add float *gs_dist for handling the tie
+//dim_or is equal to recall_at
+// template <typename T>
+// double calculate_recall(uint32_t num_queries, float *gs_dist, uint32_t dim_gs, const std::vector<std::vector<std::vector<T>>> &query_result_values, const std::vector<std::vector<std::vector<T>>> &gt_values,
+//                         uint32_t recall_at)
+// {
+    
+//     double total_recall = 0;
+    
+//     for (size_t i = 0; i < num_queries; i++)
+//     {
+//         const auto &res_vecs = query_result_values[i];
+//         auto gt_vecs = gt_values[i];
+// ///MARK: if res_vecs.size < recall_at --- not get enough fullret --- this is posssible if searching stop too early
+//         assert(recall_at == res_vecs.size());
+// ///MARK: to get those tie breaker -- we need to increase the K of computing and saving the groundTruthValues  
+//         size_t tie_breaker = recall_at;//this is necessary for case gs_dist is not available
+//         if (gs_dist != nullptr)
+//         {
+//             tie_breaker = recall_at - 1;
+//             float *gt_dist_vec = gs_dist + dim_gs * i;//dim_gs is number of gt for this query
+//             while (tie_breaker < dim_gs && gt_dist_vec[tie_breaker] == gt_dist_vec[recall_at - 1])
+//                 tie_breaker++;
+//         }
 
+//         // gt.insert(gt_vec, gt_vec + tie_breaker);The range [first, last) means elements from first up to, but not including, last.
+//         gt_vecs.resize(tie_breaker);
+
+//         uint32_t cur_recall = 0;
+//         for (const auto &resV : res_vecs){
+//             for(const auto &gtV : gt_vecs){
+//                 if (std::equal(resV.begin(), resV.end(), gtV.begin(), gtV.end())){
+//                     cur_recall++;
+//                     break;
+//                 }
+//             }
+//         }
+
+//         total_recall += cur_recall;
+//     }
+
+//     return total_recall / (num_queries) * (100.0 / recall_at);//return percent not percentage
+// }
 double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist, uint32_t dim_gs,
-                        uint32_t *our_results, uint32_t dim_or, uint32_t recall_at)
+    uint32_t *our_results, uint32_t dim_or, uint32_t recall_at)
 {
     double total_recall = 0;
     std::set<uint32_t> gt, res;
@@ -148,9 +194,8 @@ double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist
         }
 
         gt.insert(gt_vec, gt_vec + tie_breaker);
-        res.insert(res_vec,
-                   res_vec + recall_at); // change to recall_at for recall k@k
-                                         // or dim_or for k@dim_or
+        res.insert(res_vec, res_vec + recall_at); // change to recall_at for recall k@k
+                            // or dim_or for k@dim_or
         uint32_t cur_recall = 0;
         for (auto &v : gt)
         {
@@ -164,7 +209,7 @@ double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist
     return total_recall / (num_queries) * (100.0 / recall_at);
 }
 
-double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist, uint32_t dim_gs,
+double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist, uint32_t dim_gs, 
                         uint32_t *our_results, uint32_t dim_or, uint32_t recall_at,
                         const tsl::robin_set<uint32_t> &active_tags)
 {
@@ -221,35 +266,6 @@ double calculate_recall(uint32_t num_queries, uint32_t *gold_std, float *gs_dist
         total_recall += cur_recall;
     }
     return ((double)(total_recall / (num_queries))) * ((double)(100.0 / recall_at));
-}
-
-double calculate_range_search_recall(uint32_t num_queries, std::vector<std::vector<uint32_t>> &groundtruth,
-                                     std::vector<std::vector<uint32_t>> &our_results)
-{
-    double total_recall = 0;
-    std::set<uint32_t> gt, res;
-
-    for (size_t i = 0; i < num_queries; i++)
-    {
-        gt.clear();
-        res.clear();
-
-        gt.insert(groundtruth[i].begin(), groundtruth[i].end());
-        res.insert(our_results[i].begin(), our_results[i].end());
-        uint32_t cur_recall = 0;
-        for (auto &v : gt)
-        {
-            if (res.find(v) != res.end())
-            {
-                cur_recall++;
-            }
-        }
-        if (gt.size() != 0)
-            total_recall += ((100.0 * cur_recall) / gt.size());
-        else
-            total_recall += 100;
-    }
-    return total_recall / (num_queries);
 }
 
 #ifdef EXEC_ENV_OLS

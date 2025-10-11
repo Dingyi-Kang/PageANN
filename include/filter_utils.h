@@ -202,12 +202,13 @@ inline std::vector<uint32_t> loadTags(const std::string &tags_file, const std::s
             diskann::cerr << "tags file error" << std::endl;
             throw diskann::ANNException("tag file error", -1, __FUNCSIG__, __FILE__, __LINE__);
         }
-
-        // check if the point count match
+        // // check if the point count match
         size_t base_file_npts, base_file_ndims;
         diskann::get_bin_metadata(base_file, base_file_npts, base_file_ndims);
         if (base_file_npts != tag_file_npts)
         {
+            std::cout << "base_file_npts: " << base_file_npts << std::endl;
+            std::cout << "tag_file_npts: " << tag_file_npts << std::endl;
             diskann::cerr << "point num in tags file mismatch" << std::endl;
             throw diskann::ANNException("point num in tags file mismatch", -1, __FUNCSIG__, __FILE__, __LINE__);
         }

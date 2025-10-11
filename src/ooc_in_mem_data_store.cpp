@@ -1,17 +1,21 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: Page-level Graph Index Generation
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #include <memory>
 #include "abstract_scratch.h"
-#include "in_mem_data_store.h"
-
+#include "ooc_in_mem_data_store.h"
+#include <iomanip> 
 #include "utils.h"
 
 namespace diskann
 {
 
 template <typename data_t>
-InMemDataStore<data_t>::InMemDataStore(const location_t num_points, const size_t dim,
+InMemOOCDataStore<data_t>::InMemOOCDataStore(const location_t num_points, const size_t dim,
                                        std::unique_ptr<Distance<data_t>> distance_fn)
     : AbstractDataStore<data_t>(num_points, dim), _distance_fn(std::move(distance_fn))
 {
@@ -21,7 +25,7 @@ InMemDataStore<data_t>::InMemDataStore(const location_t num_points, const size_t
     std::memset(_data, 0, this->_capacity * _aligned_dim * sizeof(data_t));
 }
 
-template <typename data_t> InMemDataStore<data_t>::~InMemDataStore()
+template <typename data_t> InMemOOCDataStore<data_t>::~InMemOOCDataStore()
 {
     if (_data != nullptr)
     {
@@ -29,23 +33,23 @@ template <typename data_t> InMemDataStore<data_t>::~InMemDataStore()
     }
 }
 
-template <typename data_t> size_t InMemDataStore<data_t>::get_aligned_dim() const
+template <typename data_t> size_t InMemOOCDataStore<data_t>::get_aligned_dim() const
 {
     return _aligned_dim;
 }
 
-template <typename data_t> size_t InMemDataStore<data_t>::get_alignment_factor() const
+template <typename data_t> size_t InMemOOCDataStore<data_t>::get_alignment_factor() const
 {
     return _distance_fn->get_required_alignment();
 }
 
-template <typename data_t> location_t InMemDataStore<data_t>::load(const std::string &filename)
+template <typename data_t> location_t InMemOOCDataStore<data_t>::load(const std::string &filename)
 {
     return load_impl(filename);
 }
 
 #ifdef EXEC_ENV_OLS
-template <typename data_t> location_t InMemDataStore<data_t>::load_impl(AlignedFileReader &reader)
+template <typename data_t> location_t InMemOOCDataStore<data_t>::load_impl(AlignedFileReader &reader)
 {
     size_t file_dim, file_num_points;
 
@@ -71,7 +75,7 @@ template <typename data_t> location_t InMemDataStore<data_t>::load_impl(AlignedF
 }
 #endif
 
-template <typename data_t> location_t InMemDataStore<data_t>::load_impl(const std::string &filename)
+template <typename data_t> location_t InMemOOCDataStore<data_t>::load_impl(const std::string &filename)
 {
     size_t file_dim, file_num_points;
     if (!file_exists(filename))
@@ -94,22 +98,21 @@ template <typename data_t> location_t InMemDataStore<data_t>::load_impl(const st
         throw diskann::ANNException(stream.str(), -1, __FUNCSIG__, __FILE__, __LINE__);
     }
 
-    if (file_num_points > this->capacity())
-    {
-        this->resize((location_t)file_num_points);
-    }
-
+    diskann::cout << "data_file_num_points: " << file_num_points << std::endl;
+    diskann::cout << "data_file_dim: " << file_dim << std::endl;
+    diskann::cout << "npts_to_cache: " << this->capacity() << std::endl << std::endl;
     copy_aligned_data_from_file<data_t>(filename.c_str(), _data, file_num_points, file_dim, _aligned_dim);
-
-    return (location_t)file_num_points;
+    diskann::cout << "Finish loading data points to _data " << std::endl;
+    
+    return (location_t)this->capacity();
 }
 
-template <typename data_t> size_t InMemDataStore<data_t>::save(const std::string &filename, const location_t num_points)
+template <typename data_t> size_t InMemOOCDataStore<data_t>::save(const std::string &filename, const location_t num_points)
 {
     return save_data_in_base_dimensions(filename, _data, num_points, this->get_dims(), this->get_aligned_dim(), 0U);
 }
 
-template <typename data_t> void InMemDataStore<data_t>::populate_data(const data_t *vectors, const location_t num_pts)
+template <typename data_t> void InMemOOCDataStore<data_t>::populate_data(const data_t *vectors, const location_t num_pts)
 {
     memset(_data, 0, _aligned_dim * sizeof(data_t) * num_pts);
     for (location_t i = 0; i < num_pts; i++)
@@ -123,7 +126,7 @@ template <typename data_t> void InMemDataStore<data_t>::populate_data(const data
     }
 }
 
-template <typename data_t> void InMemDataStore<data_t>::populate_data(const std::string &filename, const size_t offset)
+template <typename data_t> void InMemOOCDataStore<data_t>::populate_data(const std::string &filename, const size_t offset)
 {
     size_t npts, ndim;
     copy_aligned_data_from_file(filename.c_str(), _data, npts, ndim, _aligned_dim, offset);
@@ -153,18 +156,41 @@ template <typename data_t> void InMemDataStore<data_t>::populate_data(const std:
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::extract_data_to_bin(const std::string &filename, const location_t num_points)
+void InMemOOCDataStore<data_t>::extract_data_to_bin(const std::string &filename, const location_t num_points)
 {
     save_data_in_base_dimensions(filename, _data, num_points, this->get_dims(), this->get_aligned_dim(), 0U);
 }
 
-template <typename data_t> void InMemDataStore<data_t>::get_vector(const location_t i, data_t *dest) const
+//this is only used in create_disk_layout to insert vector into the page --- hence, no need to cache it anymore. instead, if find it, we should clear its memory to save space
+///MARK: it more worthy to use space for storing graph info -- we dont need _data buffer anymore
+template <typename data_t> void InMemOOCDataStore<data_t>::get_vector(const location_t i, data_t *dest) const
 {
-    // REFACTOR TODO: Should we denormalize and return values?
     memcpy(dest, _data + i * _aligned_dim, this->_dim * sizeof(data_t));
 }
 
-template <typename data_t> void InMemDataStore<data_t>::set_vector(const location_t loc, const data_t *const vector)
+template <typename data_t> std::vector<float> InMemOOCDataStore<data_t>::computeDist(uint32_t node, const std::vector<location_t>& neighbors) {
+    ///MARK: check and make sure node and all neighbors are avalible
+    //look_cache_node(node);
+    std::vector<float> distances;
+    for (const auto& neighbor : neighbors) {
+        //look_cache_node(static_cast<uint32_t>(neighbor));
+        distances.push_back(get_distance(node, neighbor));
+    }
+    return distances;
+}
+
+template <typename data_t> void InMemOOCDataStore<data_t>::look_cache_node(uint32_t i){
+
+}
+
+template <typename data_t> void InMemOOCDataStore<data_t>::cleanup_cache(){
+    
+}
+
+template <typename data_t> void InMemOOCDataStore<data_t>::set_nnodes_to_load(size_t n){
+}
+
+template <typename data_t> void InMemOOCDataStore<data_t>::set_vector(const location_t loc, const data_t *const vector)
 {
     size_t offset_in_data = loc * _aligned_dim;
     memset(_data + offset_in_data, 0, _aligned_dim * sizeof(data_t));
@@ -175,14 +201,14 @@ template <typename data_t> void InMemDataStore<data_t>::set_vector(const locatio
     }
 }
 
-template <typename data_t> void InMemDataStore<data_t>::prefetch_vector(const location_t loc)
+template <typename data_t> void InMemOOCDataStore<data_t>::prefetch_vector(const location_t loc)
 {
     diskann::prefetch_vector((const char *)_data + _aligned_dim * (size_t)loc * sizeof(data_t),
                              sizeof(data_t) * _aligned_dim);
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::preprocess_query(const data_t *query, AbstractScratch<data_t> *query_scratch) const
+void InMemOOCDataStore<data_t>::preprocess_query(const data_t *query, AbstractScratch<data_t> *query_scratch) const
 {
     if (query_scratch != nullptr)
     {
@@ -191,19 +217,19 @@ void InMemDataStore<data_t>::preprocess_query(const data_t *query, AbstractScrat
     else
     {
         std::stringstream ss;
-        ss << "In InMemDataStore::preprocess_query: Query scratch is null";
+        ss << "In InMemOOCDataStore::preprocess_query: Query scratch is null";
         diskann::cerr << ss.str() << std::endl;
         throw diskann::ANNException(ss.str(), -1);
     }
 }
 
-template <typename data_t> float InMemDataStore<data_t>::get_distance(const data_t *query, const location_t loc) const
+template <typename data_t> float InMemOOCDataStore<data_t>::get_distance(const data_t *query, const location_t loc) const
 {
     return _distance_fn->compare(query, _data + _aligned_dim * loc, (uint32_t)_aligned_dim);
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::get_distance(const data_t *query, const location_t *locations,
+void InMemOOCDataStore<data_t>::get_distance(const data_t *query, const location_t *locations,
                                           const uint32_t location_count, float *distances,
                                           AbstractScratch<data_t> *scratch_space) const
 {
@@ -213,15 +239,16 @@ void InMemDataStore<data_t>::get_distance(const data_t *query, const location_t 
     }
 }
 
+//this is the one we use
 template <typename data_t>
-float InMemDataStore<data_t>::get_distance(const location_t loc1, const location_t loc2) const
+float InMemOOCDataStore<data_t>::get_distance(const location_t loc1, const location_t loc2) const
 {
     return _distance_fn->compare(_data + loc1 * _aligned_dim, _data + loc2 * _aligned_dim,
-                                 (uint32_t)this->_aligned_dim);
+                                (uint32_t)this->_aligned_dim);
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::get_distance(const data_t *preprocessed_query, const std::vector<location_t> &ids,
+void InMemOOCDataStore<data_t>::get_distance(const data_t *preprocessed_query, const std::vector<location_t> &ids,
                                           std::vector<float> &distances, AbstractScratch<data_t> *scratch_space) const
 {
     for (int i = 0; i < ids.size(); i++)
@@ -231,7 +258,7 @@ void InMemDataStore<data_t>::get_distance(const data_t *preprocessed_query, cons
     }
 }
 
-template <typename data_t> location_t InMemDataStore<data_t>::expand(const location_t new_size)
+template <typename data_t> location_t InMemOOCDataStore<data_t>::expand(const location_t new_size)
 {
     if (new_size == this->capacity())
     {
@@ -257,7 +284,7 @@ template <typename data_t> location_t InMemDataStore<data_t>::expand(const locat
     return this->_capacity;
 }
 
-template <typename data_t> location_t InMemDataStore<data_t>::shrink(const location_t new_size)
+template <typename data_t> location_t InMemOOCDataStore<data_t>::shrink(const location_t new_size)
 {
     if (new_size == this->capacity())
     {
@@ -284,7 +311,7 @@ template <typename data_t> location_t InMemDataStore<data_t>::shrink(const locat
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::move_vectors(const location_t old_location_start, const location_t new_location_start,
+void InMemOOCDataStore<data_t>::move_vectors(const location_t old_location_start, const location_t new_location_start,
                                           const location_t num_locations)
 {
     if (num_locations == 0 || old_location_start == new_location_start)
@@ -331,7 +358,7 @@ void InMemDataStore<data_t>::move_vectors(const location_t old_location_start, c
 }
 
 template <typename data_t>
-void InMemDataStore<data_t>::copy_vectors(const location_t from_loc, const location_t to_loc,
+void InMemOOCDataStore<data_t>::copy_vectors(const location_t from_loc, const location_t to_loc,
                                           const location_t num_points)
 {
     assert(from_loc < this->_capacity);
@@ -340,7 +367,7 @@ void InMemDataStore<data_t>::copy_vectors(const location_t from_loc, const locat
     memmove(_data + _aligned_dim * to_loc, _data + _aligned_dim * from_loc, num_points * _aligned_dim * sizeof(data_t));
 }
 
-template <typename data_t> location_t InMemDataStore<data_t>::calculate_medoid() const
+template <typename data_t> location_t InMemOOCDataStore<data_t>::calculate_medoid() const
 {
     // allocate and init centroid
     float *center = new float[_aligned_dim];
@@ -391,13 +418,13 @@ template <typename data_t> location_t InMemDataStore<data_t>::calculate_medoid()
     return min_idx;
 }
 
-template <typename data_t> Distance<data_t> *InMemDataStore<data_t>::get_dist_fn() const
+template <typename data_t> Distance<data_t> *InMemOOCDataStore<data_t>::get_dist_fn() const
 {
     return this->_distance_fn.get();
 }
 
-template DISKANN_DLLEXPORT class InMemDataStore<float>;
-template DISKANN_DLLEXPORT class InMemDataStore<int8_t>;
-template DISKANN_DLLEXPORT class InMemDataStore<uint8_t>;
+template DISKANN_DLLEXPORT class InMemOOCDataStore<float>;
+template DISKANN_DLLEXPORT class InMemOOCDataStore<int8_t>;
+template DISKANN_DLLEXPORT class InMemOOCDataStore<uint8_t>;
 
 } // namespace diskann

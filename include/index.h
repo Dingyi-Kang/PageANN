@@ -1,5 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
+//
+// PageANN: In-Memory Vamana Index Header
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
 
 #pragma once
 
@@ -20,6 +24,8 @@
 #include "scratch.h"
 #include "in_mem_data_store.h"
 #include "in_mem_graph_store.h"
+#include "ooc_in_mem_data_store.h"
+#include "ooc_in_mem_graph_store.h"
 #include "abstract_index.h"
 
 #include "quantized_distance.h"
@@ -313,6 +319,9 @@ template <typename T, typename TagT = uint32_t, typename LabelT = uint32_t> clas
 
     void initialize_query_scratch(uint32_t num_threads, uint32_t search_l, uint32_t indexing_l, uint32_t r,
                                   uint32_t maxc, size_t dim);
+
+//newly added function for mergingNodesIntoPages
+    //std::vector<float> computeDist(uint32_t node, const std::vector<location_t>& neighbors); 
 
     // Do not call without acquiring appropriate locks
     // call public member functions save and load to invoke these.

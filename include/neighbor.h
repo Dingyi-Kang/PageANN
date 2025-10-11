@@ -18,7 +18,7 @@ struct Neighbor
     bool expanded;
 
     Neighbor() = default;
-
+//in our scheme, we create new id for them -- comparedNodeIndex
     Neighbor(unsigned id, float distance) : id{id}, distance{distance}, expanded(false)
     {
     }
@@ -48,7 +48,7 @@ class NeighborPriorityQueue
     }
 
     // Inserts the item ordered into the set up to the sets capacity.
-    // The item will be dropped if it is the same id as an exiting
+    // The item will be dropped if it is the same id as an exsiting
     // set item or it has a greated distance than the final
     // item in the set. The set cursor that is used to pop() the
     // next item will be set to the lowest index of an uncheck item
@@ -59,6 +59,7 @@ class NeighborPriorityQueue
             return;
         }
 
+        //binary search
         size_t lo = 0, hi = _size;
         while (lo < hi)
         {
