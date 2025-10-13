@@ -14,7 +14,9 @@ PageANN extends Microsoft's [DiskANN](https://github.com/microsoft/DiskANN) with
 
 ## Citation
 
-If you use PageANN in your research, please cite:
+If you use PageANN in your research, please cite our paper:
+
+**[Scalable Disk-Based Approximate Nearest Neighbor Search with Page-Aligned Graph](https://www.arxiv.org/abs/2509.25487)**
 
 ```bibtex
 @article{kang2025pageann,
