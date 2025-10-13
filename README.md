@@ -76,6 +76,21 @@ For detailed workflow and command-line instructions, see:
 - **[PageANN Usage Guide](workflows/PageANN_usage.md)**: Complete workflow for building and searching PageANN indexes
 - **[Paper Experiments Parameters](workflows/Paper%20experiments%20parameters.md)**: Exact parameters to reproduce results from our paper
 
+## Key Tools
+
+### Main Applications
+
+- `build_vamana_disk_index`: Build Vamana vector-level disk index
+- `generate_page_graph`: Convert Vamana index to page-level graph
+- `recommend_vamana_graph_degree`: Recommend optimal graph degree parameters
+- `search_disk_index`: Search the page-level index
+
+### Utility Tools
+
+- `compute_groundtruth`: Compute ground truth for recall evaluation
+- `generate_hash_buckets`: Generate hash buckets for routing
+- `generate_reorder_pq`: Regenerate PQ with different compression levels
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
