@@ -2455,8 +2455,8 @@ int build_disk_index(const char *dataFilePath, const char *indexFilePath, const 
     diskann::cout << "Compressing " << dim << "-dimensional data into " << num_pq_chunks << " bytes per vector."
                   << std::endl;
 
-    // generate_quantized_data<T>(data_file_to_use, pq_pivots_path, pq_compressed_vectors_path, compareMetric, p_val,
-    //                            num_pq_chunks, use_opq, codebook_prefix);
+    generate_quantized_data<T>(data_file_to_use, pq_pivots_path, pq_compressed_vectors_path, compareMetric, p_val,
+                               num_pq_chunks, use_opq, codebook_prefix);
     diskann::cout << timer.elapsed_seconds_for_step("generating quantized data") << std::endl;
 
 // Gopal. Splitting diskann_dll into separate DLLs for search and build.
