@@ -1,0 +1,251 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT license.
+//
+// PageANN: Search Scratch Space Management
+// Copyright (c) 2025 Dingyi Kang <dingyikangosu@gmail.com>. All rights reserved.
+// Licensed under the MIT license.
+
+#include <vector>
+#include <boost/dynamic_bitset.hpp>
+
+#include "scratch.h"
+#ifdef __linux__
+#include "linux_async_file_reader.h"
+#endif
+#include "pq_scratch.h"
+
+namespace diskann
+{
+//
+// Functions to manage scratch space for in-memory index based search
+//
+template <typename T>
+InMemQueryScratch<T>::InMemQueryScratch(uint32_t search_l, uint32_t indexing_l, uint32_t r, uint32_t maxc, size_t dim,
+                                        size_t aligned_dim, size_t alignment_factor, bool init_pq_scratch)
+    : _L(0), _R(r), _maxc(maxc)
+{
+    if (search_l == 0 || indexing_l == 0 || r == 0 || dim == 0)
+    {
+        std::stringstream ss;
+        ss << "In InMemQueryScratch, one of search_l = " << search_l << ", indexing_l = " << indexing_l
+           << ", dim = " << dim << " or r = " << r << " is zero." << std::endl;
+        throw diskann::ANNException(ss.str(), -1);
+    }
+
+    alloc_aligned(((void **)&this->_aligned_query_T), aligned_dim * sizeof(T), alignment_factor * sizeof(T));
+    memset(this->_aligned_query_T, 0, aligned_dim * sizeof(T));
+
+    if (init_pq_scratch)
+        this->_pq_scratch = new PQScratch<T>(defaults::MAX_GRAPH_DEGREE, aligned_dim);
+    else
+        this->_pq_scratch = nullptr;
+
+    _occlude_factor.reserve(maxc);
+    _inserted_into_pool_bs = new boost::dynamic_bitset<>();
+    _id_scratch.reserve((size_t)std::ceil(1.5 * defaults::GRAPH_SLACK_FACTOR * _R));
+    _dist_scratch.reserve((size_t)std::ceil(1.5 * defaults::GRAPH_SLACK_FACTOR * _R));
+
+    resize_for_new_L(std::max(search_l, indexing_l));
+}
+
+template <typename T> void InMemQueryScratch<T>::clear()
+{
+    _pool.clear();
+    _best_l_nodes.clear();
+    _occlude_factor.clear();
+
+    _inserted_into_pool_rs.clear();
+    _inserted_into_pool_bs->reset();
+
+    _id_scratch.clear();
+    _dist_scratch.clear();
+
+    _expanded_nodes_set.clear();
+    _expanded_nghrs_vec.clear();
+    _occlude_list_output.clear();
+}
+
+template <typename T> void InMemQueryScratch<T>::resize_for_new_L(uint32_t new_l)
+{
+    if (new_l > _L)
+    {
+        _L = new_l;
+        _pool.reserve(3 * _L + _R);
+        _best_l_nodes.reserve(_L);
+
+        _inserted_into_pool_rs.reserve(20 * _L);
+    }
+}
+
+template <typename T> InMemQueryScratch<T>::~InMemQueryScratch()
+{
+    if (this->_aligned_query_T != nullptr)
+    {
+        aligned_free(this->_aligned_query_T);
+        this->_aligned_query_T = nullptr;
+    }
+
+    delete this->_pq_scratch;
+    delete _inserted_into_pool_bs;
+}
+
+//
+// Functions to manage scratch space for SSD based search
+//
+template <typename T> void SSDQueryScratch<T>::reset()
+{
+    sector_idx = 0;
+    retset.clear();
+    expandedPages.clear();
+    if(use_pageann){
+        nav_retset.clear();  // Reset navigation graph retset
+        full_retset.clear();
+    }
+    else{
+        seededPages.clear();
+        deferred_proc_vec_uncached_page_ids.clear();
+        // deferred_proc_uncached_vec_buffer: no clear needed, overwritten before each read
+        nav_retset.clear();
+        full_ret_queue.clear();
+
+#ifdef __linux__
+        // Clear I/O tracking state (but keep buffers and async_reader for reuse)
+        completed_io_map.clear();
+        pending_io_map.clear();
+        // Mark all buffers as not in use
+        for (auto &buf : io_buffer_pool) {
+            buf.in_use = false;
+        }
+#endif
+    }
+}
+
+template <typename T> SSDQueryScratch<T>::SSDQueryScratch(size_t aligned_dim, size_t estimated_visited_vectors, size_t nnodes_sector, bool use_pageann_mode, uint32_t window_search_W): use_pageann(use_pageann_mode)
+{
+    size_t coord_alloc_size = ROUND_UP(sizeof(T) * aligned_dim, 256);
+    diskann::alloc_aligned((void **)&coord_scratch, coord_alloc_size, 256);
+
+    // Only allocate sector_scratch for PageANN (synchronous I/O)
+    // LAANN uses io_uring with its own buffer pool
+    if (use_pageann) {
+        diskann::alloc_aligned((void **)&sector_scratch, defaults::MAX_N_SECTOR_READS * defaults::SECTOR_LEN,
+                               defaults::SECTOR_LEN);////const uint64_t MAX_N_SECTOR_READS = 128;
+    } else {
+        sector_scratch = nullptr;  // LAANN doesn't need this (saves 512KB per thread!)
+    }
+
+    ///MARK: it needs to aligned with 0 cuz AXV load 8 floats at a time
+    diskann::alloc_aligned((void **)&this->_aligned_query_T, aligned_dim * sizeof(T), 8 * sizeof(T));
+    //field declared in the abstrastScratch class
+    this->_pq_scratch = new PQScratch<T>(defaults::MAX_GRAPH_DEGREE, aligned_dim);
+
+    memset(coord_scratch, 0, coord_alloc_size);
+    memset(this->_aligned_query_T, 0, aligned_dim * sizeof(T));
+
+    expandedPages.reserve(estimated_visited_vectors/nnodes_sector);
+    if (use_pageann){
+        full_retset.reserve(estimated_visited_vectors);
+    }
+    else{
+        // seededPages, deferred_* vectors reserved per-query in laann_search;
+        // capacity is preserved across reset() so reserve() is only a real allocation on the first query.
+#ifdef __linux__
+//queue_depth
+        io_buffer_pool.reserve(window_search_W * 2);
+        completed_io_map.reserve(window_search_W * 2);
+        pending_io_map.reserve(window_search_W * 2);
+#endif
+    }
+}
+
+template <typename T> SSDQueryScratch<T>::~SSDQueryScratch()
+{
+    diskann::aligned_free((void *)coord_scratch);
+    if (sector_scratch != nullptr) {
+        diskann::aligned_free((void *)sector_scratch);
+    }
+    diskann::aligned_free((void *)this->_aligned_query_T);
+
+#ifdef __linux__
+    // Clean up async I/O resources
+    if (async_reader != nullptr) {
+        delete async_reader;
+        async_reader = nullptr;
+    }
+    
+    // Free all I/O buffers
+    for (auto &buf : io_buffer_pool) {
+        if (buf.data != nullptr) {
+            free(buf.data);
+        }
+    }
+    io_buffer_pool.clear();
+#endif
+
+    delete this->_pq_scratch;
+}
+
+template <typename T>
+SSDThreadData<T>::SSDThreadData(size_t aligned_dim, size_t estimated_visited_vectors, size_t nnodes_sector, bool use_pageann, uint32_t window_search_W) : scratch(aligned_dim, estimated_visited_vectors, nnodes_sector, use_pageann, window_search_W)
+{
+}
+
+template <typename T> void SSDThreadData<T>::clear()
+{
+    scratch.reset();
+}
+
+template <typename T> PQScratch<T>::PQScratch(size_t graph_degree, size_t aligned_dim)
+{   
+    //this is used to the PQ ids of curr node's neighbors
+    diskann::alloc_aligned((void **)&aligned_pq_coord_scratch, (size_t)graph_degree * (size_t)MAX_PQ_CHUNKS * sizeof(uint8_t), 256);
+    //pqtable --  store precomputed distances between each of the 256 possible values (number of centroids) of the quantized vectors (chunks/sub-vectors) and the query vector subspaces.
+    //The alignment of 256 bytes ensures that memory access is optimized for modern CPU architectures, which can significantly improve performance by reducing cache misses and making better use of SIMD (Single Instruction, Multiple Data) instructions.
+    diskann::alloc_aligned((void **)&aligned_pqtable_dist_scratch, 256 * (size_t)MAX_PQ_CHUNKS * sizeof(float), 256);
+    //pq distances of neibors to the current node
+    diskann::alloc_aligned((void **)&aligned_dist_scratch, (size_t)graph_degree * sizeof(float), 256);
+    //query's real value
+    diskann::alloc_aligned((void **)&aligned_query_float, aligned_dim * sizeof(float), 8 * sizeof(float));
+    diskann::alloc_aligned((void **)&rotated_query, aligned_dim * sizeof(float), 8 * sizeof(float));
+
+    memset(aligned_query_float, 0, aligned_dim * sizeof(float));
+    memset(rotated_query, 0, aligned_dim * sizeof(float));
+}
+
+template <typename T> PQScratch<T>::~PQScratch()
+{
+    diskann::aligned_free((void *)aligned_pq_coord_scratch);
+    diskann::aligned_free((void *)aligned_pqtable_dist_scratch);
+    diskann::aligned_free((void *)aligned_dist_scratch);
+    diskann::aligned_free((void *)aligned_query_float);
+    diskann::aligned_free((void *)rotated_query);
+}
+
+template <typename T> void PQScratch<T>::initialize(size_t dim, const T *query, const float norm)
+{
+    for (size_t d = 0; d < dim; ++d)
+    {
+        if (norm != 1.0f)
+            rotated_query[d] = aligned_query_float[d] = static_cast<float>(query[d]) / norm;
+        else
+            rotated_query[d] = aligned_query_float[d] = static_cast<float>(query[d]);
+    }
+}
+
+template DISKANN_DLLEXPORT class InMemQueryScratch<int8_t>;
+template DISKANN_DLLEXPORT class InMemQueryScratch<uint8_t>;
+template DISKANN_DLLEXPORT class InMemQueryScratch<float>;
+
+template DISKANN_DLLEXPORT class SSDQueryScratch<int8_t>;
+template DISKANN_DLLEXPORT class SSDQueryScratch<uint8_t>;
+template DISKANN_DLLEXPORT class SSDQueryScratch<float>;
+
+template DISKANN_DLLEXPORT class PQScratch<int8_t>;
+template DISKANN_DLLEXPORT class PQScratch<uint8_t>;
+template DISKANN_DLLEXPORT class PQScratch<float>;
+
+template DISKANN_DLLEXPORT class SSDThreadData<int8_t>;
+template DISKANN_DLLEXPORT class SSDThreadData<uint8_t>;
+template DISKANN_DLLEXPORT class SSDThreadData<float>;
+
+} // namespace diskann
